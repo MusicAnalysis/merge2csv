@@ -44,6 +44,7 @@ class Note_p:
 
 #2 read standard notes from file
 f=open('1_Bach_WellTemperedClavier_Prelude_No.5_BWV846_Cmajor_全曲.csv')
+#f=open('2_Bach_WellTemperedClavier_Prelude_No.5_BWV850_Dmajor_全曲.csv')
 datalist = []
 i=0
 for line in f:
@@ -57,6 +58,7 @@ for line in f:
 
 #3 read played notes from file 
 f=open('pio01_Bach1_S1_T1.csv')
+#f=open('pio01_Bach2_S1_T1.csv')
 datalist_p = []
 i=0
 for line in f:
@@ -120,39 +122,65 @@ def compareNote(n1,n2):
 	else:
 		return False        
 		#return False
-last_tie=[]
-tie=[]
+
+def getPrevNode(current, hand):
+	for i in range(current-1,-1,-1):
+		if datalist[i].staff == hand:
+			return datalist[i]
+	return None
+
+def findTie(index, node, prev_node):
+	tie = getTieList(index, node.staff)
+	if node.pitch in tie:
+		print("skipping tie {} {} {}".format(i, node.pitch, node.staff))
+		node.connect2 = prev_node.connect2
+		datalist_m.append(datalist_p[node.connect2])
+		return True
+	return False
+
+def getTieKey(index, hand):
+	return "{}{}".format(index, hand)
+
+tie_list = {}
+def getTieList(index, hand):
+	key = getTieKey(index, hand)
+	if key not in tie_list:
+		tie_list[key] = []
+	return tie_list[key]
+
+def addNode(index, node):
+	tie = getTieList(index, node.staff)
+	tie.append(node.pitch)
+
+def switchTieList(node):
+	last_key = getTieKey("last", node.staff)
+	current_key = getTieKey("current", node.staff)
+	tie_list[last_key] = getTieList("current", node.staff)
+	tie_list[current_key] = []
+	tie_list[current_key].append(node.pitch)
+
+
 #8 start to comapre notes one on one
 datalist_m = []
 for i in range(len(datalist)):
 	node = datalist[i]
-	if i > 1:
-		prev_node = datalist[i-1]
+	prev_node = getPrevNode(i, node.staff)
+	if prev_node != None:
 		if node.default_x == prev_node.default_x:
-			if node.pitch in tie:
-				print("skipping tie {} ({}) {}".format(i, node.measure, node.pitch))
-				node.connect2 = prev_node.connect2
-				datalist_m.append(datalist_p[node.connect2])
+			if findTie("current", node, prev_node):
 				continue
-			tie.append(node.pitch)
+			addNode("current", node)
 		else:
-			last_tie = tie
-			tie = []
-			tie.append(node.pitch)
-			if node.pitch in last_tie:
-				print("skipping tie {} ({}) {}".format(i, node.measure, node.pitch))
-				node.connect2 = prev_node.connect2
-				datalist_m.append(datalist_p[node.connect2])
+			switchTieList(node)
+			if findTie("last", node, prev_node):
 				continue
 
 	for j in range(len(datalist_p)):
 		# check if the note has been connected to 
 		if datalist[i].connect2 == -1 and datalist_p[j].connect2 == -1:
-
-
 			# compare the played note if we can find the same pitch within 0.3 seconds onset time.
 			curOnsetTime = datalist_p[datalist[i-1].connect2 -1].onsettime if i >0 else 0
-			print("{}({}) {} {}".format(i,node.measure, node.pitch, curOnsetTime))
+			print("{}({}) {} {} {}".format(i, node.measure, node.pitch, node.staff, curOnsetTime))
 			k=j
 			isFound=False
 			while k<len(datalist_p) and (curOnsetTime == 0 or datalist_p[k].onsettime-curOnsetTime < 1.5 ):
