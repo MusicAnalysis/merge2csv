@@ -11,7 +11,7 @@ class Note:
 		self.pitch=p
 		self.pitch2=''
 		self.type=t
-		self.duration=int(d)
+		self.duration=int(d) if d != '' else 0
 		self.staff=int(s)
 		self.connect2=-1
 		
@@ -43,7 +43,7 @@ class Note_p:
 
 
 #2 read standard notes from file
-f=open('2_Bach_WellTemperedClavier_Prelude_No.5_BWV850_Dmajor_全曲.csv')
+f=open('1_Bach_WellTemperedClavier_Prelude_No.5_BWV846_Cmajor_全曲.csv')
 datalist = []
 i=0
 for line in f:
@@ -56,7 +56,7 @@ for line in f:
 	datalist.append(n)
 
 #3 read played notes from file 
-f=open('pio01_Bach2_S1_T3.csv')
+f=open('pio01_Bach1_S1_T1.csv')
 datalist_p = []
 i=0
 for line in f:
@@ -77,7 +77,7 @@ for line in f:
 for n in datalist:
 	n.weight_x = (n.measure-1)*500 + n.default_x
 # do the sorting
-datalist.sort(key=attrgetter('weight_x'))
+datalist.sort(key=attrgetter('measure','default_x'))
 
 
 #5 sort played notes by onset time
@@ -120,20 +120,50 @@ def compareNote(n1,n2):
 	else:
 		return False        
 		#return False
-
+last_tie=[]
+tie=[]
 #8 start to comapre notes one on one
 datalist_m = []
 for i in range(len(datalist)):
+	node = datalist[i]
+	if i > 1:
+		prev_node = datalist[i-1]
+		if node.default_x == prev_node.default_x:
+			if node.pitch in tie:
+				print("skipping tie {} ({}) {}".format(i, node.measure, node.pitch))
+				node.connect2 = prev_node.connect2
+				datalist_m.append(datalist_p[node.connect2])
+				continue
+			tie.append(node.pitch)
+		else:
+			last_tie = tie
+			tie = []
+			tie.append(node.pitch)
+			if node.pitch in last_tie:
+				print("skipping tie {} ({}) {}".format(i, node.measure, node.pitch))
+				node.connect2 = prev_node.connect2
+				datalist_m.append(datalist_p[node.connect2])
+				continue
+
 	for j in range(len(datalist_p)):
 		# check if the note has been connected to 
 		if datalist[i].connect2 == -1 and datalist_p[j].connect2 == -1:
+
+
 			# compare the played note if we can find the same pitch within 0.3 seconds onset time.
-			curOnsetTime = datalist_p[j].onsettime
+			curOnsetTime = datalist_p[datalist[i-1].connect2 -1].onsettime if i >0 else 0
+			print("{}({}) {} {}".format(i,node.measure, node.pitch, curOnsetTime))
 			k=j
 			isFound=False
-			while k<len(datalist_p) and (datalist_p[k].onsettime-curOnsetTime<0.3):
-            # Bach1 = 0.3, Bach 2 = 0.3, 
-				if compareNote(datalist[i],datalist_p[k])==True:
+			while k<len(datalist_p) and (curOnsetTime == 0 or datalist_p[k].onsettime-curOnsetTime < 1.5 ):
+            # Bach1 = 0.3, Bach 2 = 0.3,
+				node_p = datalist_p[k]
+				not_checked = datalist_p[k].connect2 == -1
+				not_too_old = datalist_p[k].onsettime-curOnsetTime > -1 
+				if not_checked and not_too_old:
+					print("  checking {}({}) {}".format(node_p.pitch, k, node_p.onsettime))
+				if not_checked and not_too_old and compareNote(datalist[i],datalist_p[k])==True:
+					print("   Found!")
 					# we found the same note. Add it to the datalist_m
 					datalist[i].connect2=k+1
 					datalist_p[k].connect2=i+1
@@ -144,9 +174,10 @@ for i in range(len(datalist)):
 					k+=1				
 			
 			if isFound==False:
+				print("   note out of range {}", datalist_p[k].onsettime)
 				# we cannot find the same note. Create a patch note and add to the datalist_m
 				n = Note_p(datalist[i].pitch,0,0,0,0)
-				datalist[i].connect2=j+1
+				datalist[i].connect2=datalist[i-1].connect2
 				n.connect2=i+1
 				datalist_m.append(n)
 
